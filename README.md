@@ -2,7 +2,7 @@
 
 ## Project Description
 
-`normalize_files.sh` is a Bash command-line utility for renaming class files into a consistent `chapter_N_readable_name.ext` format. It is based on the behavior of `normalize_files.py`.
+`normalize_files.sh` is a Bash command-line utility for copying class files into a `normalized` folder with consistent `chapter_N_readable_name.ext` filenames. It is based on the behavior of `normalize_files.py`.
 
 The script cleans common Canvas/download filename patterns:
 
@@ -14,7 +14,8 @@ The script cleans common Canvas/download filename patterns:
 - converts spaces, periods, and hyphens into underscores
 - preserves existing `chapter_N_` prefixes
 - prompts for a chapter number when a file does not already have one
-- avoids overwriting existing files by adding `_1`, `_2`, and so on
+- keeps the original files unchanged
+- avoids overwriting existing normalized files by adding `_1`, `_2`, and so on
 
 For merged words, the script uses `python3` with `wordninja` if that library is installed. If `wordninja` is not installed, it falls back to a small built-in splitter for the class filename words used by this project.
 
@@ -30,7 +31,7 @@ If no folder is supplied, use `.` for the current folder.
 
 ### `preview`
 
-Shows the planned filename changes without renaming files.
+Shows the planned filename changes without copying files.
 
 ```bash
 ./normalize_files.sh preview ./sample_files
@@ -38,7 +39,7 @@ Shows the planned filename changes without renaming files.
 
 ### `apply`
 
-Shows the planned filename changes, asks for confirmation, then renames the files.
+Shows the planned filename changes, asks for confirmation, then copies the files into a `normalized` folder.
 
 ```bash
 ./normalize_files.sh apply ./sample_files
@@ -52,7 +53,7 @@ Prints a short report with file counts, chapter-prefix counts, tagged-file count
 ./normalize_files.sh stats ./sample_files
 ```
 
-Each mode writes a timestamped report file named like:
+Each mode creates the `normalized` folder and writes a timestamped report file there named like:
 
 ```text
 normalize_report_YYYYMMDD_HHMMSS_PID.txt
@@ -97,4 +98,4 @@ Run the apply mode:
 ./normalize_files.sh apply test_files
 ```
 
-Confirm with `y` to rename the files.
+Confirm with `y` to copy the files into `test_files/normalized`.

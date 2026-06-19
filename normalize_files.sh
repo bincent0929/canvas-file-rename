@@ -11,8 +11,8 @@ Usage:
   $PROGRAM_NAME stats [folder]
 
 Modes:
-  preview   Show proposed normalized filenames without renaming files
-  apply     Show proposed filenames, confirm, then rename files
+  preview   Show proposed normalized filenames without copying files
+  apply     Show proposed filenames, confirm, then copy files into normalized/
   stats     Summarize filename patterns in the folder
 
 Exit codes:
@@ -28,6 +28,17 @@ is_directory() {
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+normalize_folder_path() {
+    local path
+    path=$1
+
+    while [[ "$path" != "/" && "$path" == */ ]]; do
+        path=${path%/}
+    done
+
+    printf '%s\n' "$path"
 }
 
 has_chapter_prefix() {
@@ -208,6 +219,54 @@ get_unique_path() {
     printf '%s\n' "$next_path"
 }
 
+get_chapter_number() {
+    local name
+    name=$(basename "$1")
+
+    if [[ "$name" =~ ^[Cc][Hh][Aa][Pp][Tt][Ee][Rr]_([0-9]+)_ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    printf '999999\n'
+}
+
+print_copy_line() {
+    local old_path new_path chapter_number
+    old_path=$1
+    new_path=$2
+    chapter_number=$(get_chapter_number "$new_path")
+
+    if [[ "$chapter_number" == "999999" ]]; then
+        printf 'Chapter unknown: %s  ->  normalized/%s\n' "$(basename "$old_path")" "$(basename "$new_path")"
+    else
+        printf 'Chapter %s: %s  ->  normalized/%s\n' "$((10#$chapter_number))" "$(basename "$old_path")" "$(basename "$new_path")"
+    fi
+}
+
+sort_planned_copies() {
+    local count i j old_path new_path current_chapter next_chapter
+    count=${#OLD_PATHS[@]}
+
+    for ((i = 0; i < count; i++)); do
+        for ((j = i + 1; j < count; j++)); do
+            current_chapter=$(get_chapter_number "${NEW_PATHS[$i]}")
+            next_chapter=$(get_chapter_number "${NEW_PATHS[$j]}")
+
+            if ((10#$next_chapter < 10#$current_chapter)); then
+                old_path=${OLD_PATHS[$i]}
+                new_path=${NEW_PATHS[$i]}
+
+                OLD_PATHS[$i]=${OLD_PATHS[$j]}
+                NEW_PATHS[$i]=${NEW_PATHS[$j]}
+
+                OLD_PATHS[$j]=$old_path
+                NEW_PATHS[$j]=$new_path
+            fi
+        done
+    done
+}
+
 print_stats() {
     local folder total chapter_count tagged_count duplicate_stems report
     folder=$1
@@ -236,11 +295,12 @@ print_stats() {
     } | tee "$report"
 }
 
-collect_renames() {
-    local mode folder report file name normalized chapter_number target unique_target
+collect_copies() {
+    local mode folder report output_dir file name normalized chapter_number target target_path unique_target
     mode=$1
     folder=$2
     report=$3
+    output_dir=$4
 
     OLD_PATHS=()
     NEW_PATHS=()
@@ -249,69 +309,66 @@ collect_renames() {
     while IFS= read -r -d '' -u 3 file; do
         name=$(basename "$file")
         printf '\nFile: %s\n' "$name"
-        printf '\nFile: %s\n' "$name" >> "$report"
 
         normalized=$(normalize_filename "$name")
 
         if has_chapter_prefix "$name"; then
             target=$normalized
             printf 'Chapter prefix already found; not prompting for chapter number.\n'
-            printf 'Chapter prefix already found; not prompting for chapter number.\n' >> "$report"
         else
             printf 'Enter chapter number for this file, or press Enter to skip: '
             IFS= read -r chapter_number
 
             if [[ -z "$chapter_number" ]]; then
                 printf 'Skipped.\n'
-                printf 'Skipped.\n' >> "$report"
                 continue
             fi
 
             if [[ ! "$chapter_number" =~ ^[0-9]+$ ]]; then
                 printf 'Invalid chapter number; skipped.\n'
-                printf 'Invalid chapter number; skipped.\n' >> "$report"
                 continue
             fi
 
             target="chapter_${chapter_number}_${normalized}"
         fi
 
-        if [[ "$name" == "$target" ]]; then
-            printf 'No change needed.\n'
-            printf 'No change needed.\n' >> "$report"
-            continue
-        fi
-
-        unique_target=$(get_unique_path "$folder/$target")
+        target_path="$output_dir/$target"
+        unique_target=$(get_unique_path "$target_path")
         OLD_PATHS+=("$file")
         NEW_PATHS+=("$unique_target")
         PLANNED_TARGETS+=("$unique_target")
-        printf 'Queued: %s -> %s\n' "$name" "$(basename "$unique_target")"
-        printf 'Queued: %s -> %s\n' "$name" "$(basename "$unique_target")" >> "$report"
+        printf 'Queued: %s -> normalized/%s\n' "$name" "$(basename "$unique_target")"
     done 3< <(find "$folder" -maxdepth 1 -type f ! -name "$PROGRAM_NAME" ! -name 'normalize_report_*.txt' -print0 2>/dev/null | sort -z)
 
     [[ ${#OLD_PATHS[@]} -gt 0 ]]
 }
 
-show_planned_renames() {
+show_planned_copies() {
     local report i
     report=$1
 
-    printf '\nPlanned renames:\n'
-    printf '\nPlanned renames:\n' >> "$report"
+    printf '\nPlanned copies:\n'
+    printf '\nPlanned copies:\n' >> "$report"
     for i in "${!OLD_PATHS[@]}"; do
-        printf '%s  ->  %s\n' "$(basename "${OLD_PATHS[$i]}")" "$(basename "${NEW_PATHS[$i]}")"
-        printf '%s  ->  %s\n' "$(basename "${OLD_PATHS[$i]}")" "$(basename "${NEW_PATHS[$i]}")" >> "$report"
+        print_copy_line "${OLD_PATHS[$i]}" "${NEW_PATHS[$i]}"
+        print_copy_line "${OLD_PATHS[$i]}" "${NEW_PATHS[$i]}" >> "$report"
     done
 }
 
-apply_renames() {
-    local report i
+apply_copies() {
+    local report output_dir i
     report=$1
+    output_dir=$2
 
+    if ! mkdir -p -- "$output_dir"; then
+        printf 'Failed to create output directory: %s\n' "$output_dir" >> "$report"
+        return 1
+    fi
+
+    printf '\nCopied files:\n' >> "$report"
     for i in "${!OLD_PATHS[@]}"; do
-        if mv -- "${OLD_PATHS[$i]}" "${NEW_PATHS[$i]}"; then
-            printf 'Renamed: %s\n' "$(basename "${NEW_PATHS[$i]}")" >> "$report"
+        if cp -- "${OLD_PATHS[$i]}" "${NEW_PATHS[$i]}"; then
+            print_copy_line "${OLD_PATHS[$i]}" "${NEW_PATHS[$i]}" >> "$report"
         else
             printf 'Failed: %s\n' "$(basename "${OLD_PATHS[$i]}")" >> "$report"
             return 1
@@ -322,7 +379,7 @@ apply_renames() {
 }
 
 main() {
-    local mode folder report file_count confirm
+    local mode folder output_dir report file_count confirm
 
     if [[ $# -lt 1 || $# -gt 2 ]]; then
         usage
@@ -346,7 +403,10 @@ main() {
         exit 1
     fi
 
-    if ! command_exists find || ! command_exists sed || ! command_exists sort || ! command_exists uniq || ! command_exists tee; then
+    folder=$(normalize_folder_path "$folder")
+    output_dir="$folder/normalized"
+
+    if ! command_exists find || ! command_exists sed || ! command_exists sort || ! command_exists uniq || ! command_exists tee || ! command_exists mkdir || ! command_exists cp; then
         printf 'Required command-line tools are missing.\n' >&2
         exit 1
     fi
@@ -357,7 +417,12 @@ main() {
         exit 0
     fi
 
-    report=$(make_report_path "$folder")
+    if ! mkdir -p -- "$output_dir"; then
+        printf 'Failed to create output directory: %s\n' "$output_dir" >&2
+        exit 1
+    fi
+
+    report=$(make_report_path "$output_dir")
     : > "$report"
 
     if [[ "$mode" == "stats" ]]; then
@@ -369,37 +434,38 @@ main() {
     printf 'Mode: %s\nFolder: %s\nFiles found: %s\nReport: %s\n' "$mode" "$folder" "$file_count" "$report"
     printf 'Mode: %s\nFolder: %s\nFiles found: %s\nReport: %s\n' "$mode" "$folder" "$file_count" "$report" >> "$report"
 
-    if ! collect_renames "$mode" "$folder" "$report"; then
-        printf '\nNo files were queued for renaming.\n'
-        printf '\nNo files were queued for renaming.\n' >> "$report"
+    if ! collect_copies "$mode" "$folder" "$report" "$output_dir"; then
+        printf '\nNo files were queued for copying.\n'
+        printf '\nNo files were queued for copying.\n' >> "$report"
         exit 0
     fi
 
-    show_planned_renames "$report"
+    sort_planned_copies
+    show_planned_copies "$report"
 
     if [[ "$mode" == "preview" ]]; then
-        printf '\nPreview complete. No files were renamed.\n'
-        printf '\nPreview complete. No files were renamed.\n' >> "$report"
+        printf '\nPreview complete. No files were copied.\n'
+        printf '\nPreview complete. No files were copied.\n' >> "$report"
         printf 'Report written to: %s\n' "$report"
         exit 0
     fi
 
-    printf '\nApply these changes? (y/n): '
+    printf '\nApply these changes and copy files into normalized/? (y/n): '
     IFS= read -r confirm
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-        printf 'Rename cancelled.\n'
-        printf 'Rename cancelled.\n' >> "$report"
+        printf 'Copy cancelled.\n'
+        printf 'Copy cancelled.\n' >> "$report"
         exit 0
     fi
 
-    if apply_renames "$report"; then
-        printf '\nRenamed %s file(s).\n' "${#OLD_PATHS[@]}"
-        printf '\nRenamed %s file(s).\n' "${#OLD_PATHS[@]}" >> "$report"
+    if apply_copies "$report" "$output_dir"; then
+        printf '\nCopied %s file(s) into: %s\n' "${#OLD_PATHS[@]}" "$output_dir"
+        printf '\nCopied %s file(s) into: %s\n' "${#OLD_PATHS[@]}" "$output_dir" >> "$report"
         printf 'Report written to: %s\n' "$report"
         exit 0
     fi
 
-    printf 'One or more renames failed. See report: %s\n' "$report" >&2
+    printf 'One or more copies failed. See report: %s\n' "$report" >&2
     exit 1
 }
 
