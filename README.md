@@ -1,4 +1,4 @@
-# Normalize Files Bash Utility
+# Canvas File Rename
 
 ## Project Description
 
