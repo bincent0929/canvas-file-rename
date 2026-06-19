@@ -1,0 +1,44 @@
+Mode: preview
+Folder: test-files/
+Files found: 9
+Report: test-files//normalize_report_20260617_161210_386147.txt
+
+File: Birth and the newborn child. (1) - Tagged.pdf
+Queued: Birth and the newborn child. (1) - Tagged.pdf -> chapter_4_Birth_and_the_newborn_child_Tagged.pdf
+
+File: Ch 5 Physical, Cognitive and Socio emotional Dev in Infancy - Tagged.pdf
+Queued: Ch 5 Physical, Cognitive and Socio emotional Dev in Infancy - Tagged.pdf -> chapter_5_Physical_Cognitive_and_Socio_emotional_Dev_in_Infancy_Tagged.pdf
+
+File: Genetics and Prenatal Development-1 - Tagged.pdf
+Queued: Genetics and Prenatal Development-1 - Tagged.pdf -> chapter_3_Genetics_and_Prenatal_Development_1_Tagged.pdf
+
+File: Physical and Cog dev in middle childhood - Tagged.pdf
+Queued: Physical and Cog dev in middle childhood - Tagged.pdf -> chapter_8_Physical_and_Cog_dev_in_middle_child_hood_Tagged.pdf
+
+File: Slides 6.11 Ch 6 Physical, Cognitive and Socio emotional Dev in Toddlerhood - Tagged.pdf
+Queued: Slides 6.11 Ch 6 Physical, Cognitive and Socio emotional Dev in Toddlerhood - Tagged.pdf -> chapter_6_Physical_Cognitive_and_Socio_emotional_Dev_in_Toddlerhood_Tagged.pdf
+
+File: Slides  Ch 7 - Tagged.pdf
+Queued: Slides  Ch 7 - Tagged.pdf -> chapter_7_Slides_Ch_7_Tagged.pdf
+
+File: Socio-emotional Dev in Middle Childhood. - Tagged.pdf
+Queued: Socio-emotional Dev in Middle Childhood. - Tagged.pdf -> chapter_9_Socio_emotional_Dev_in_Middle_Child_Hood_Tagged.pdf
+
+File: Theories of Child Development.. - Tagged.pdf
+Queued: Theories of Child Development.. - Tagged.pdf -> chapter_2_the_Ories_of_Child_Development_Tagged.pdf
+
+File: Thinking about Child Development Current & Cultural Perspectives(2) - Tagged.pdf
+Queued: Thinking about Child Development Current & Cultural Perspectives(2) - Tagged.pdf -> chapter_1_Thinking_about_Child_Development_Current_and_Cultural_Perspectives_Tagged.pdf
+
+Planned renames:
+Birth and the newborn child. (1) - Tagged.pdf  ->  chapter_4_Birth_and_the_newborn_child_Tagged.pdf
+Ch 5 Physical, Cognitive and Socio emotional Dev in Infancy - Tagged.pdf  ->  chapter_5_Physical_Cognitive_and_Socio_emotional_Dev_in_Infancy_Tagged.pdf
+Genetics and Prenatal Development-1 - Tagged.pdf  ->  chapter_3_Genetics_and_Prenatal_Development_1_Tagged.pdf
+Physical and Cog dev in middle childhood - Tagged.pdf  ->  chapter_8_Physical_and_Cog_dev_in_middle_child_hood_Tagged.pdf
+Slides 6.11 Ch 6 Physical, Cognitive and Socio emotional Dev in Toddlerhood - Tagged.pdf  ->  chapter_6_Physical_Cognitive_and_Socio_emotional_Dev_in_Toddlerhood_Tagged.pdf
+Slides  Ch 7 - Tagged.pdf  ->  chapter_7_Slides_Ch_7_Tagged.pdf
+Socio-emotional Dev in Middle Childhood. - Tagged.pdf  ->  chapter_9_Socio_emotional_Dev_in_Middle_Child_Hood_Tagged.pdf
+Theories of Child Development.. - Tagged.pdf  ->  chapter_2_the_Ories_of_Child_Development_Tagged.pdf
+Thinking about Child Development Current & Cultural Perspectives(2) - Tagged.pdf  ->  chapter_1_Thinking_about_Child_Development_Current_and_Cultural_Perspectives_Tagged.pdf
+
+Preview complete. No files were renamed.
