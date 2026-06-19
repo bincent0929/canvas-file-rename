@@ -268,31 +268,84 @@ sort_planned_copies() {
 }
 
 print_stats() {
-    local folder total chapter_count tagged_count duplicate_stems report
+    local folder total chapter_count tagged_count duplicate_stems
     folder=$1
-    report=$2
 
     total=$(count_files "$folder")
     chapter_count=$(find "$folder" -maxdepth 1 -type f ! -name 'normalize_report_*.txt' -printf '%f\n' 2>/dev/null | grep -Eic '^chapter_[0-9]+_')
     tagged_count=$(find "$folder" -maxdepth 1 -type f ! -name 'normalize_report_*.txt' -printf '%f\n' 2>/dev/null | grep -Eic -- '-Tagged\.')
     duplicate_stems=$(find "$folder" -maxdepth 1 -type f ! -name 'normalize_report_*.txt' -printf '%f\n' 2>/dev/null | sed -E 's/\.[^.]+$//' | sort | uniq -d | wc -l | tr -d ' ')
 
-    {
-        printf 'Filename normalization stats\n'
-        printf 'Folder: %s\n' "$folder"
-        printf 'Total files: %s\n' "$total"
-        printf 'Files with chapter prefix: %s\n' "$chapter_count"
-        printf 'Files with -Tagged marker: %s\n' "$tagged_count"
-        printf 'Duplicate filename stems: %s\n' "$duplicate_stems"
-        printf '\nTop extensions:\n'
-        find "$folder" -maxdepth 1 -type f ! -name 'normalize_report_*.txt' -printf '%f\n' 2>/dev/null |
-            sed -nE 's/^.*\.([^.]+)$/\1/p' |
-            tr '[:upper:]' '[:lower:]' |
-            sort |
-            uniq -c |
-            sort -rn |
-            head -5
-    } | tee "$report"
+    printf 'Filename normalization stats\n'
+    printf 'Folder: %s\n' "$folder"
+    printf 'Total files: %s\n' "$total"
+    printf 'Files with chapter prefix: %s\n' "$chapter_count"
+    printf 'Files with -Tagged marker: %s\n' "$tagged_count"
+    printf 'Duplicate filename stems: %s\n' "$duplicate_stems"
+    printf '\nTop extensions:\n'
+    find "$folder" -maxdepth 1 -type f ! -name 'normalize_report_*.txt' -printf '%f\n' 2>/dev/null |
+        sed -nE 's/^.*\.([^.]+)$/\1/p' |
+        tr '[:upper:]' '[:lower:]' |
+        sort |
+        uniq -c |
+        sort -rn |
+        head -5
+}
+
+find_latest_preview_report() {
+    local output_dir candidate latest first_line
+    output_dir=$1
+    latest=""
+
+    for candidate in "$output_dir"/normalize_report_*.txt; do
+        [[ -f "$candidate" ]] || continue
+        IFS= read -r first_line < "$candidate"
+        if [[ "$first_line" == "Mode: preview" ]]; then
+            latest=$candidate
+        fi
+    done
+
+    [[ -n "$latest" ]] || return 1
+    printf '%s\n' "$latest"
+}
+
+load_preview_plan() {
+    local folder output_dir preview_report line in_plan old_name new_name
+    folder=$1
+    output_dir=$2
+    preview_report=$3
+
+    OLD_PATHS=()
+    NEW_PATHS=()
+    PLANNED_TARGETS=()
+    in_plan=0
+
+    while IFS= read -r line; do
+        if [[ "$line" == "Planned copies:" ]]; then
+            in_plan=1
+            continue
+        fi
+
+        if [[ "$in_plan" -eq 1 && -z "$line" ]]; then
+            break
+        fi
+
+        if [[ "$in_plan" -eq 1 && "$line" =~ ^Chapter\ ([0-9]+|unknown):\ (.*)\ \ -\>\ \ normalized/(.*)$ ]]; then
+            old_name=${BASH_REMATCH[2]}
+            new_name=${BASH_REMATCH[3]}
+
+            if [[ ! -f "$folder/$old_name" ]]; then
+                printf 'Preview plan references a missing file: %s\n' "$old_name" >&2
+                return 1
+            fi
+
+            OLD_PATHS+=("$folder/$old_name")
+            NEW_PATHS+=("$output_dir/$new_name")
+            PLANNED_TARGETS+=("$output_dir/$new_name")
+        fi
+    done < "$preview_report"
+
+    [[ ${#OLD_PATHS[@]} -gt 0 ]]
 }
 
 collect_copies() {
@@ -379,7 +432,7 @@ apply_copies() {
 }
 
 main() {
-    local mode folder output_dir report file_count confirm
+    local mode folder output_dir report file_count confirm preview_report
 
     if [[ $# -lt 1 || $# -gt 2 ]]; then
         usage
@@ -406,7 +459,7 @@ main() {
     folder=$(normalize_folder_path "$folder")
     output_dir="$folder/normalized"
 
-    if ! command_exists find || ! command_exists sed || ! command_exists sort || ! command_exists uniq || ! command_exists tee || ! command_exists mkdir || ! command_exists cp; then
+    if ! command_exists find || ! command_exists sed || ! command_exists sort || ! command_exists uniq; then
         printf 'Required command-line tools are missing.\n' >&2
         exit 1
     fi
@@ -417,6 +470,16 @@ main() {
         exit 0
     fi
 
+    if [[ "$mode" == "stats" ]]; then
+        print_stats "$folder"
+        exit 0
+    fi
+
+    if ! command_exists mkdir || ! command_exists cp; then
+        printf 'Required command-line tools are missing.\n' >&2
+        exit 1
+    fi
+
     if ! mkdir -p -- "$output_dir"; then
         printf 'Failed to create output directory: %s\n' "$output_dir" >&2
         exit 1
@@ -425,19 +488,24 @@ main() {
     report=$(make_report_path "$output_dir")
     : > "$report"
 
-    if [[ "$mode" == "stats" ]]; then
-        print_stats "$folder" "$report"
-        printf '\nReport written to: %s\n' "$report"
-        exit 0
-    fi
-
     printf 'Mode: %s\nFolder: %s\nFiles found: %s\nReport: %s\n' "$mode" "$folder" "$file_count" "$report"
     printf 'Mode: %s\nFolder: %s\nFiles found: %s\nReport: %s\n' "$mode" "$folder" "$file_count" "$report" >> "$report"
 
-    if ! collect_copies "$mode" "$folder" "$report" "$output_dir"; then
-        printf '\nNo files were queued for copying.\n'
-        printf '\nNo files were queued for copying.\n' >> "$report"
-        exit 0
+    if [[ "$mode" == "apply" ]] && preview_report=$(find_latest_preview_report "$output_dir"); then
+        printf 'Using preview report: %s\n' "$preview_report"
+        printf 'Using preview report: %s\n' "$preview_report" >> "$report"
+
+        if ! load_preview_plan "$folder" "$output_dir" "$preview_report"; then
+            printf 'Could not load planned copies from preview report: %s\n' "$preview_report" >&2
+            printf 'Could not load planned copies from preview report: %s\n' "$preview_report" >> "$report"
+            exit 1
+        fi
+    else
+        if ! collect_copies "$mode" "$folder" "$report" "$output_dir"; then
+            printf '\nNo files were queued for copying.\n'
+            printf '\nNo files were queued for copying.\n' >> "$report"
+            exit 0
+        fi
     fi
 
     sort_planned_copies

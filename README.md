@@ -41,19 +41,21 @@ Shows the planned filename changes without copying files.
 
 Shows the planned filename changes, asks for confirmation, then copies the files into a `normalized` folder.
 
+If a preview report already exists in `normalized`, apply uses the most recent preview plan so you do not need to enter chapter numbers again.
+
 ```bash
 ./normalize_files.sh apply ./sample_files
 ```
 
 ### `stats`
 
-Prints a short report with file counts, chapter-prefix counts, tagged-file counts, duplicate stem counts, and top file extensions.
+Prints file counts, chapter-prefix counts, tagged-file counts, duplicate stem counts, and top file extensions to the terminal.
 
 ```bash
 ./normalize_files.sh stats ./sample_files
 ```
 
-Each mode creates the `normalized` folder and writes a timestamped report file there named like:
+The `preview` and `apply` modes create the `normalized` folder and write a timestamped report file there named like:
 
 ```text
 normalize_report_YYYYMMDD_HHMMSS_PID.txt
