@@ -3,6 +3,7 @@
 PROGRAM_NAME=$(basename "$0")
 PLANNED_TARGETS=()
 
+# Print command usage, supported modes, and exit code meanings.
 usage() {
     cat <<USAGE
 Usage:
@@ -22,61 +23,97 @@ Exit codes:
 USAGE
 }
 
+# Return success when the given path is a directory.
 is_directory() {
     [[ -d "$1" ]]
 }
 
+# Return success when the named command is available on the system.
+# It basically returns a boolean value for whether
+# the command exists
 command_exists() {
+    # command checks whether the giving command exists
+    # >/dev/null discards the normal output
+    # 2>&1 discards the error output
     command -v "$1" >/dev/null 2>&1
 }
 
+# Remove trailing slashes from a folder path while preserving root.
 normalize_folder_path() {
     local path
     path=$1
 
+    # makes sure it isn't root
+    # makes sure that there are still `/` to remove
     while [[ "$path" != "/" && "$path" == */ ]]; do
+        # removes a `/` from the path
         path=${path%/}
-    done
+    done # no more `/` in the path's string
 
     printf '%s\n' "$path"
 }
 
+# Return success when a filename already starts with chapter_N_.
 has_chapter_prefix() {
     local name stem
+    # this removes the folder path
+    # jim/bean.md -> bean.md
     name=$(basename "$1")
+    # removes the file extension
     stem=${name%.*}
     [[ "$stem" =~ ^[Cc][Hh][Aa][Pp][Tt][Ee][Rr]_[0-9]+_ ]]
 }
 
+# Return success when a target path has already been planned in this run.
 path_is_planned() {
     local candidate planned
     candidate=$1
+    # checks the planned targets whether
+    # they are the same as the candidate
+    # aka whether the candidate has been planned
     for planned in "${PLANNED_TARGETS[@]}"; do
         [[ "$planned" == "$candidate" ]] && return 0
     done
     return 1
 }
 
+# Print the number of regular source files in the folder.
 count_files() {
+    # looks in the folder for files
+    # doesn't search subfolders
+    # only counts regular files
+    # doesn't count the bash program itself
+    # doesn't count the generated report
+    # prints the filesnames and discards errors from the find
+    # the total files are then counted and spaces are removed from their lines
     find "$1" -maxdepth 1 -type f ! -name "$PROGRAM_NAME" ! -name 'normalize_report_*.txt' -print 2>/dev/null | wc -l | tr -d ' '
 }
 
+# Print a timestamped report path inside the given folder.
 make_report_path() {
     local folder stamp
     folder=$1
     stamp=$(date '+%Y%m%d_%H%M%S')
+    # constructs the report path
+    # the final string is the process ID and prevents same-second conflicts
     printf '%s/normalize_report_%s_%s.txt\n' "$folder" "$stamp" "$$"
 }
 
+# Split merged words using wordninja when available, with a local fallback.
 smart_word_split() {
     local text
     text=$1
 
+    # checks whether the text is empty
     if [[ -z "$text" ]]; then
         printf '\n'
         return 0
     fi
 
+    # if there is text,
+    # the program tries to run the Python script that
+    # uses wordninja to smart split the words for cleaner
+    # paths
     if command_exists python3; then
         python3 - "$text" <<'PY'
 import re
@@ -136,48 +173,83 @@ PY
     printf '%s\n' "$text"
 }
 
+# Clean the filename stem by removing download markers and normalizing words.
 normalize_body() {
     local stem cleaned part split_part cleaned_parts
     stem=$1
-    cleaned_parts=()
+    cleaned_parts=() # an array
 
+    # removed "-Tagged"
     stem=$(printf '%s' "$stem" | sed -E 's/-[Tt][Aa][Gg][Gg][Ee][Dd]$//')
+    # removes (N) with N being an integer
     stem=$(printf '%s' "$stem" | sed -E 's/\([0-9]+\)//g')
+    # removes -N with N being an integer
     stem=$(printf '%s' "$stem" | sed -E 's/-[0-9]+$//')
+    # changes "&" to "and"
+    # removes commas
+    # changes "..." to "."
     stem=$(printf '%s' "$stem" | sed -E 's/&/ and /g; s/,//g; s/\.{2,}/./g')
+    # this is for the next two:
+    # removes previous chapter markers from the beginning
+    # for example, "Slides 6.11 Ch 6" and "Ch 5"
     stem=$(printf '%s' "$stem" | sed -E 's/^[Ss]lides[[:space:]]+[0-9]+(\.[0-9]+)*[[:space:]]+[Cc][Hh][[:space:]]*[0-9]+[[:space:]]+//')
     stem=$(printf '%s' "$stem" | sed -E 's/^[Cc][Hh][[:space:]]*[0-9]+[[:space:]]+//')
+    # adds spaces between lowercase and uppercase letters
+    # aka separates words based on capitals (supplemented by the smart splitting seen in smart_word_split)
     stem=$(printf '%s' "$stem" | sed -E 's/([[:lower:]])([[:upper:]])/\1 \2/g')
 
+    # The loop takes the `stem` which has been
+    # processed to a great extent and further refines it.
+    # It takes each word from the stem and
+    # separates them by newlines 
+    # (changes spaces, periods, and hyphens into newlines).
     while IFS= read -r part; do
+        # this removes underscores from the 
+        # beginning and end of the word line
         part=$(printf '%s' "$part" | sed -E 's/^_+//; s/_+$//')
-
+        
+        # continues if the line isn't empty
         [[ -z "$part" ]] && continue
 
+        # if the line has something like "Ch5"
+        # then it doesn't change the line.
         if [[ "$part" =~ ^[Cc][Hh][0-9]+$ ]]; then
             cleaned_parts+=("$part")
             continue
         fi
 
+        # if the line is a number
+        # then it doesn't change it.
         if [[ "$part" =~ ^[0-9]+$ ]]; then
             cleaned_parts+=("$part")
             continue
         fi
 
+        # feeds the line into the smart python splitter
+        # and it separates any combined words.
         split_part=$(smart_word_split "$part")
         cleaned_parts+=("$split_part")
-    done < <(printf '%s\n' "$stem" | tr '[:space:].-' '\n')
+    done < <(printf '%s\n' "$stem" | tr '[:space:].-' '\n') # the loop reads from this line
 
+    # joins the words the the array using "_"
     cleaned=$(IFS=_; printf '%s' "${cleaned_parts[*]}")
+    # fixes repeated underscores,
+    # removes leading underscores,
+    # and removes trailing underscores.
     cleaned=$(printf '%s' "$cleaned" | sed -E 's/_+/_/g; s/^_+//; s/_+$//')
     printf '%s\n' "$cleaned"
 }
 
+# Print the normalized filename while preserving the file extension.
 normalize_filename() {
     local name stem suffix prefix cleaned
+    # grabs the filename from the input and removes the path
     name=$(basename "$1")
     suffix=""
-
+    
+    # separates the "stem" or 
+    # file extension excluding porition
+    # from the file extension
     if [[ "$name" == *.* && "$name" != .* ]]; then
         suffix=".${name##*.}"
         stem=${name%.*}
@@ -185,16 +257,23 @@ normalize_filename() {
         stem=$name
     fi
 
+    # separates the stem from the standard prefix
+    # for chaptering as defined in the extension
+    # ex. "chapter_N" with N being an integer
     prefix=""
     if [[ "$stem" =~ ^([Cc][Hh][Aa][Pp][Tt][Ee][Rr]_[0-9]+_) ]]; then
         prefix=$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
         stem=${stem:${#BASH_REMATCH[1]}}
     fi
 
+    # this feeds the stem into the normalizer
+    # see the function above for specification
     cleaned=$(normalize_body "$stem")
+    # re-adds the prefix and suffix to the filename
     printf '%s%s%s\n' "$prefix" "$cleaned" "$suffix"
 }
 
+# Print a non-conflicting target path by adding numeric suffixes as needed.
 get_unique_path() {
     local candidate folder name stem suffix counter next_path
     candidate=$1
@@ -219,6 +298,7 @@ get_unique_path() {
     printf '%s\n' "$next_path"
 }
 
+# Print the chapter number found in a normalized filename, or a high fallback.
 get_chapter_number() {
     local name
     name=$(basename "$1")
@@ -231,6 +311,7 @@ get_chapter_number() {
     printf '999999\n'
 }
 
+# Print one formatted source-to-target copy line with its chapter label.
 print_copy_line() {
     local old_path new_path chapter_number
     old_path=$1
@@ -244,6 +325,7 @@ print_copy_line() {
     fi
 }
 
+# Sort the planned copy arrays by chapter number.
 sort_planned_copies() {
     local count i j old_path new_path current_chapter next_chapter
     count=${#OLD_PATHS[@]}
@@ -267,6 +349,7 @@ sort_planned_copies() {
     done
 }
 
+# Print filename statistics to the terminal.
 print_stats() {
     local folder total chapter_count tagged_count duplicate_stems
     folder=$1
@@ -292,6 +375,7 @@ print_stats() {
         head -5
 }
 
+# Print the newest preview report path from the normalized folder.
 find_latest_preview_report() {
     local output_dir candidate latest first_line
     output_dir=$1
@@ -309,6 +393,7 @@ find_latest_preview_report() {
     printf '%s\n' "$latest"
 }
 
+# Load planned copy paths from an existing preview report.
 load_preview_plan() {
     local folder output_dir preview_report line in_plan old_name new_name
     folder=$1
@@ -348,6 +433,7 @@ load_preview_plan() {
     [[ ${#OLD_PATHS[@]} -gt 0 ]]
 }
 
+# Build the list of planned copies, prompting for chapter numbers when needed.
 collect_copies() {
     local mode folder report output_dir file name normalized chapter_number target target_path unique_target
     mode=$1
@@ -396,6 +482,7 @@ collect_copies() {
     [[ ${#OLD_PATHS[@]} -gt 0 ]]
 }
 
+# Print the planned copies to the terminal and report.
 show_planned_copies() {
     local report i
     report=$1
@@ -408,6 +495,7 @@ show_planned_copies() {
     done
 }
 
+# Copy planned files into the normalized folder and log the results.
 apply_copies() {
     local report output_dir i
     report=$1
@@ -431,6 +519,7 @@ apply_copies() {
     return 0
 }
 
+# Validate arguments, route modes, and control script exit status.
 main() {
     local mode folder output_dir report file_count confirm preview_report
 
