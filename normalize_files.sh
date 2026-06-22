@@ -568,6 +568,9 @@ show_planned_copies() {
 
     printf '\nPlanned copies:\n'
     printf '\nPlanned copies:\n' >> "$report"
+    # executes the printing of the plan
+    # (doesn't actually run it but what it will do)
+    # echos it (doesn't use echo) to the terminal and the report
     for i in "${!OLD_PATHS[@]}"; do
         print_copy_line "${OLD_PATHS[$i]}" "${NEW_PATHS[$i]}"
         print_copy_line "${OLD_PATHS[$i]}" "${NEW_PATHS[$i]}" >> "$report"
@@ -580,11 +583,15 @@ apply_copies() {
     report=$1
     output_dir=$2
 
+    # tries to create the output directory
     if ! mkdir -p -- "$output_dir"; then
         printf 'Failed to create output directory: %s\n' "$output_dir" >> "$report"
         return 1
     fi
 
+    # copies the files from their old 
+    # path and updates their
+    # names into the new path
     printf '\nCopied files:\n' >> "$report"
     for i in "${!OLD_PATHS[@]}"; do
         if cp -- "${OLD_PATHS[$i]}" "${NEW_PATHS[$i]}"; then
