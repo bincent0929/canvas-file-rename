@@ -433,6 +433,10 @@ find_latest_preview_report() {
     output_dir=$1
     latest=""
 
+    # checks whether there's already a report in
+    # the output folder that was created by a run
+    # of the preview mode of the program.
+    # this is for doing an apply run after a preview run
     for candidate in "$output_dir"/normalize_report_*.txt; do
         [[ -f "$candidate" ]] || continue
         IFS= read -r first_line < "$candidate"
@@ -441,7 +445,9 @@ find_latest_preview_report() {
         fi
     done
 
+    # checks to see if latest is empty
     [[ -n "$latest" ]] || return 1
+
     printf '%s\n' "$latest"
 }
 
@@ -458,29 +464,37 @@ load_preview_plan() {
     in_plan=0
 
     while IFS= read -r line; do
+        # checks whether there were planned copies
         if [[ "$line" == "Planned copies:" ]]; then
             in_plan=1
             continue
         fi
 
+        # also checks if the line is empty
         if [[ "$in_plan" -eq 1 && -z "$line" ]]; then
             break
         fi
 
+        # this grabs the chapter number
+        # the original filename
+        # and the new filename
         if [[ "$in_plan" -eq 1 && "$line" =~ ^Chapter\ ([0-9]+|unknown):\ (.*)\ \ -\>\ \ normalized/(.*)$ ]]; then
             old_name=${BASH_REMATCH[2]}
             new_name=${BASH_REMATCH[3]}
 
+            # checks whether the file still exists
             if [[ ! -f "$folder/$old_name" ]]; then
                 printf 'Preview plan references a missing file: %s\n' "$old_name" >&2
                 return 1
             fi
 
+            # saves the paths to an array for the
+            # original paths, new paths, and targets
             OLD_PATHS+=("$folder/$old_name")
             NEW_PATHS+=("$output_dir/$new_name")
             PLANNED_TARGETS+=("$output_dir/$new_name")
         fi
-    done < "$preview_report"
+    done < "$preview_report" # the while loop reads each line of the preview's report
 
     [[ ${#OLD_PATHS[@]} -gt 0 ]]
 }
@@ -503,12 +517,15 @@ collect_copies() {
 
         normalized=$(normalize_filename "$name")
 
+        # checks for chapter presence and prompts
+        # to update if chapter number isn't included.
         if has_chapter_prefix "$name"; then
             target=$normalized
             printf 'Chapter prefix already found; not prompting for chapter number.\n'
         else
             printf 'Enter chapter number for this file, or press Enter to skip: '
             IFS= read -r chapter_number
+            # ^ prompts user for input
 
             if [[ -z "$chapter_number" ]]; then
                 printf 'Skipped.\n'
@@ -521,15 +538,25 @@ collect_copies() {
             fi
 
             target="chapter_${chapter_number}_${normalized}"
+            # ^ reformulates the filename with the updated chapter appendage and number
         fi
 
         target_path="$output_dir/$target"
         unique_target=$(get_unique_path "$target_path")
+        # saves the paths for the file and its updated version to the arrays
         OLD_PATHS+=("$file")
         NEW_PATHS+=("$unique_target")
         PLANNED_TARGETS+=("$unique_target")
+        # lets the user know of the queuing in the array
         printf 'Queued: %s -> normalized/%s\n' "$name" "$(basename "$unique_target")"
     done 3< <(find "$folder" -maxdepth 1 -type f ! -name "$PROGRAM_NAME" ! -name 'normalize_report_*.txt' -print0 2>/dev/null | sort -z)
+    # ^
+    # searches the source folder for files
+    # skips the script and any reports
+    # prints the filenames with null characters
+    # sorts the filenames by null separation
+    # the 3< <() allows for keyboard input
+    # (necessary for the user to input the chapter numbers when prompted)
 
     [[ ${#OLD_PATHS[@]} -gt 0 ]]
 }
